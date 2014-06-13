@@ -31,7 +31,7 @@ import subprocess
 import sys
 import shutil
 
-RENDER_PNG = False
+RENDER_PNG = True
 BORDER = 10 # at top and bottom of result
 
 #########################################################
@@ -40,7 +40,6 @@ BORDER = 10 # at top and bottom of result
 THRESHOLD = 230
 
 VERTICAL_OFFSET = -5 # offset cut position from markerposition
-HORI_MA_OFFSET = -5 # offset for flexible marker position
 
 # Basic1:
 ITEMS1 = ('english', 'literal', 'simplified',
