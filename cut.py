@@ -54,7 +54,9 @@ ITEMS3 = ('english', 'traditional',  'simplified',
 ITEMS4 = ('english', 'traditional', 'simplified', 'pinyin')
 
 all_default = {
+        'cut_header': 0,
         'cut_footer': 2333,
+        'cut_right': None,
         'dpi': 300,
         'cut_thresh': 240, # thresholding during slicing
         }
@@ -98,6 +100,20 @@ presets = {
         'width_no': 150,
         'hori_ma_offset': -5,
         'dist_sents': 70,}),
+    'GLOSSIKA-EBK-ENZH-TRVL': {
+        'cut_header': 144,
+        'cut_footer': 850,
+        'cut_right': 1320,
+        'cut_thresh': 230, # thresholding during slicing
+        'dpi': 166,
+        'items': ITEMS3,
+        'mode': 'flexible_no',
+        'dist_marker': 72,
+        'width_marker': 70,
+        'dist_sents': 150,
+        'min_dist_no': 50,
+        'width_no': 70,
+        }
     }
 
 def get_slice_indeces(image, thresh):
@@ -117,7 +133,7 @@ def slice_image(image, no_slice, marker_slice, sents_slice, items, thresh):
     blocks_on_page = len(no_slices) - 1
     ma_slices = get_slice_indeces(image[:, marker_slice], thresh)
     if len(ma_slices) != (items_no * blocks_on_page) + 1:
-        #print len(ma_slices), (items_no * blocks_on_page) + 1, no_slice
+        print len(ma_slices), (items_no * blocks_on_page) + 1, no_slice
         return False
     blocks = []
     for i_block in range(blocks_on_page):
@@ -134,28 +150,53 @@ def main():
     if len(sys.argv) > 1:
         filename = sys.argv[1]
     else:
-        sys.exit('Please provide .pdf file')
+        sys.exit('Please provide .pdf file or name of folder')
 
-    foldername = filename[:-4]
+    if filename[:-4] == '.png':
+        foldername = filename[:-4]
+        folder = False
+    else:
+        foldername = filename
+        folder = True
 
     if foldername in presets:
         p = presets[foldername]
     else:
-        sys.exit('Could not find pdf name in presets, please edit the code.')
+        sys.exit('Could not find name in presets,\
+                please edit the code accordingly.')
 
     path_temp = foldername + '/temp/'
     if RENDER_PNG:
-        try:
-            os.makedirs(foldername)
-        except OSError:
-            sys.exit('Please delete existing folder ' + foldername)
-        os.makedirs(path_temp)
-        print 'Converting pdf to images, this can take a LONG time...'
-        subprocess.call(['convert', '-density', str(p['dpi']), '-depth', '8',
-            filename, path_temp + 'p.png'])
+        if folder:
+            try:
+                os.makedirs(path_temp)
+            except OSError:
+                sys.exit('Please delete existing folder ' + path_temp)
+            pdf_files = os.listdir(foldername)
+            pdf_files = [f for f in pdf_files if ('0' in f or '1' in f)]
+            pdf_files.sort()
+            print 'Converting pdf to images, this can take a LONG time...'
+            for i, f in enumerate(pdf_files):
+                prefix = '{0:02d}'.format(i + 1)
+                subprocess.call(['convert', '-density', str(p['dpi']),
+                    '-depth', '8', foldername + '/' + f,
+                    path_temp + prefix + '.png'])
+        else:
+            try:
+                os.makedirs(foldername)
+            except OSError:
+                sys.exit('Please delete existing folder ' + foldername)
+            os.makedirs(path_temp)
+            print 'Converting pdf to images, this can take a LONG time...'
+            subprocess.call(['convert', '-density', str(p['dpi']), '-depth',
+                '8', filename, path_temp + 'p.png'])
 
     temp_files = os.listdir(path_temp)
-    temp_files.sort(key=lambda i: int(i[2:-4]))
+    if folder:
+        temp_files.sort(key=lambda i: int(i[3:-4]))
+        temp_files.sort(key=lambda i: int(i[:2]))
+    else:
+        temp_files.sort(key=lambda i: int(i[2:-4]))
     items = p['items']
     for item in items:
         try:
@@ -172,13 +213,12 @@ def main():
         cv2.CV_LOAD_IMAGE_GRAYSCALE)
 
         # Preprocessing
+        image = image[:p['cut_footer'], :p['cut_right']]
+        image[:p['cut_header'], :] = 255
         # create thresholded image
         image_t = np.array(image)
         image_t[image >= p['cut_thresh']] = 255
         image_t[image < p['cut_thresh']] = 0
-        image_t = image_t[:p['cut_footer'], :]
-
-        image = image[:p['cut_footer'], :]
 
         try:
             no_start = np.where(np.min(image_t, axis=0) < 255)[0][0]
@@ -236,7 +276,11 @@ def main():
                 # add white border at top and bottom after cutting off everything
                 image_mins = np.min(image, axis=1)
                 black = np.where(image_mins != 255)[0]
-                image = image[black[0]:black[-1] + 1, :]
+                try:
+                    image = image[black[0]:black[-1] + 1, :]
+                except IndexError:
+                    print block_no, name
+                    sys.exit()
                 new_shape = list(image.shape)
                 new_shape[0] += BORDER * 2
                 border_image = np.zeros(new_shape, np.uint8) + 255
